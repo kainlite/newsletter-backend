@@ -12,6 +12,7 @@ pub struct Subscriber {
     pub id: String,
     pub email: String,
     pub active: bool,
+    pub validated: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -23,6 +24,7 @@ impl Subscriber {
             id: Uuid::new_v4().to_string(),
             email,
             active: true,
+            validated: false,
             created_at: now,
             updated_at: now,
         }
@@ -34,6 +36,10 @@ impl Subscriber {
         item.insert("id".to_string(), AttributeValue::S(self.id.clone()));
         item.insert("email".to_string(), AttributeValue::S(self.email.clone()));
         item.insert("active".to_string(), AttributeValue::Bool(self.active));
+        item.insert(
+            "validated".to_string(),
+            AttributeValue::Bool(self.validated),
+        );
         item.insert(
             "created_at".to_string(),
             AttributeValue::S(self.created_at.to_rfc3339()),
@@ -50,6 +56,7 @@ impl Subscriber {
         let id = item.get("id")?.as_s().ok()?;
         let email = item.get("email")?.as_s().ok()?;
         let active = item.get("active")?.as_bool().ok()?;
+        let validated = item.get("validated")?.as_bool().ok()?;
         let created_at = DateTime::parse_from_rfc3339(item.get("created_at")?.as_s().ok()?)
             .ok()?
             .with_timezone(&Utc);
@@ -61,6 +68,7 @@ impl Subscriber {
             id: id.clone(),
             email: email.clone(),
             active: *active,
+            validated: *validated,
             created_at,
             updated_at,
         })

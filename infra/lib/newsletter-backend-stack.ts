@@ -24,11 +24,22 @@ export class NewsletterBackendStack extends cdk.Stack {
       projectionType: dynamodb.ProjectionType.ALL,
     });
 
+    // SQS Queue for validating email addresses
+    const emailValidationQueue = new cdk.aws_sqs.Queue(this, 'EmailValidationQueue', {
+      queueName: 'newsletter-validation-queue',
+      visibilityTimeout: cdk.Duration.seconds(30),
+      retentionPeriod: cdk.Duration.days(1),
+    });
+
     const subscribeLambda = new RustFunction(this, 'SubscribeLambda', {
       manifestPath: '../Cargo.toml',
       functionName: 'newsletter-subscribe',
       architecture: lambda.Architecture.ARM_64,
       memorySize: 128,
+
+      environment: {
+        VALIDATION_QUEUE_URL: emailValidationQueue.queueUrl
+      },
 
       binaryName: 'subscribe',
     });
@@ -43,6 +54,28 @@ export class NewsletterBackendStack extends cdk.Stack {
       binaryName: 'unsubscribe',
     });
 
+    // Unsubscribe Lambda Function
+    const validateLambda = new RustFunction(this, 'ValidateLambda', {
+      manifestPath: '../Cargo.toml',
+      functionName: 'newsletter-validate',
+      architecture: lambda.Architecture.ARM_64,
+      memorySize: 128,
+
+      binaryName: 'validate',
+    });
+    subscribersTable.grantReadWriteData(validateLambda);
+
+    // Confirm Lambda Function
+    const confirmLambda = new RustFunction(this, 'ConfirmLambda', {
+      manifestPath: '../Cargo.toml',
+      functionName: 'newsletter-confirm',
+      architecture: lambda.Architecture.ARM_64,
+      memorySize: 128,
+
+      binaryName: 'confirm',
+    });
+    subscribersTable.grantReadWriteData(confirmLambda);
+
     // Grant Lambda functions permissions to access DynamoDB
     subscribersTable.grantReadWriteData(subscribeLambda);
     subscribersTable.grantReadWriteData(unsubscribeLambda);
@@ -54,6 +87,7 @@ export class NewsletterBackendStack extends cdk.Stack {
       deployOptions: {
         stageName: 'v1',
       },
+
       // Use minimal configuration to stay within free tier
       defaultCorsPreflightOptions: {
         allowOrigins: apigateway.Cors.ALL_ORIGINS,
@@ -71,10 +105,22 @@ export class NewsletterBackendStack extends cdk.Stack {
     const unsubscribeResource = api.root.addResource('unsubscribe');
     unsubscribeResource.addMethod('POST', unsubscribeIntegration);
 
+    // Confirm endpoint
+    const confirmIntegration = new apigateway.LambdaIntegration(confirmLambda);
+    const confirmResource = api.root.addResource('confirm');
+    confirmResource.addMethod('GET', confirmIntegration);
+
+    emailValidationQueue.grantSendMessages(subscribeLambda);
+
     // Output the API Gateway URL
     new cdk.CfnOutput(this, 'ApiUrl', {
       value: api.url,
       description: 'The URL of the API Gateway',
+    });
+
+    new cdk.CfnOutput(this, 'SqsUrl', {
+      value: emailValidationQueue.queueUrl,
+      description: 'The URL of the SQS Queue',
     });
   }
 }

@@ -42,7 +42,7 @@ newsletter-backend/
 
 ```bash
 # In the project root
-cargo lambda build --release --arm64 --runtime provided.al2
+cargo lambda build --release --arm64
 ```
 
 ### 2. Deploy the infrastructure
